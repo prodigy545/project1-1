@@ -30,6 +30,11 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.BooleanBinding;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
+
 import javafx.scene.web.WebView;
 
 
@@ -107,10 +112,17 @@ public class UI extends Application {
         CONTROL
     }
 
+    enum Transmission {
+        AUTOMATIC,
+        MANUAL
+    }
+
     record Message(String role, String content) {}
 
     class State {
         // I don't fw getter or setters either
+        public final ObjectProperty<Transmission> transmission =
+            new SimpleObjectProperty<>(Transmission.AUTOMATIC);
         public final ObjectProperty<Screen> currentScreen =
             new SimpleObjectProperty<>(Screen.HOME);
         public final ObservableList<Message> messages =
@@ -174,17 +186,64 @@ public class UI extends Application {
         controlPanel.getChildren().add(new Label("This is control view"));
         controlPanel.getChildren().add(aboutButton);
 
-        // The main map
-        // TODO: Add the map
 
-        // The control pannel
+        
+        // Transmission selection
+        Label automaticLabel = new Label("Automatic transmission selected");
+        Label manualLabel = new Label("Manual transmission selected");
+        StackPane transmissionSelectionStack = new StackPane(
+            automaticLabel,
+            manualLabel
+        );
+        controlPanel.getChildren().add(transmissionSelectionStack);
+        BooleanBinding isAutomatic =
+                state.transmission.isEqualTo(Transmission.AUTOMATIC);
+        automaticLabel.visibleProperty().bind(isAutomatic);
+        automaticLabel.managedProperty().bind(isAutomatic);
+        BooleanBinding isManual =
+                state.transmission.isEqualTo(Transmission.MANUAL);
+        manualLabel.visibleProperty().bind(isManual);
+        manualLabel.managedProperty().bind(isManual);
+        Button switchTransmission = new Button();
+        switchTransmission.textProperty().bind(
+            Bindings.when(isAutomatic)
+                    .then("Chose manual")
+                    .otherwise("Chose automatic")
+        );
+        switchTransmission.setOnAction(e -> {
+            if (state.transmission.isEqualTo(Transmission.MANUAL).get()) {
+                state.transmission.set(Transmission.AUTOMATIC);
+            } else {
+                state.transmission.set(Transmission.MANUAL);
+            }
+        });
+        controlPanel.getChildren().add(switchTransmission);
+
+        
+        // Arrow keys
+        GridPane arrowGrid = new GridPane();
+        controlPanel.getChildren().add(arrowGrid);
+
+        Button upButton = new Button("UP");
+        arrowGrid.add(upButton, 1, 0);
+
+        Button leftButton = new Button("LEFT");
+        arrowGrid.add(leftButton, 0, 1);
+
+        Button rightButton = new Button("RIGHT");
+        arrowGrid.add(rightButton, 2, 1);
+
+        Button downButton = new Button("DOWN");
+        arrowGrid.add(downButton, 1, 2);
+
+        // The main map
         VBox mainMap = new VBox();
         view.getChildren().add(mainMap);
-        // TODO: Add the actual buttons for controlling the clanker
+        // TODO: Add the map
 
+        // The AI chat application
         // NOTE: The AI chat application will be removed in future releases
         // due to the fact there's no connection when controlling the clanker
-        // The AI chat application
         VBox chat = new VBox();
         view.getChildren().add(chat);
 
