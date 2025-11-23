@@ -1,0 +1,375 @@
+#include <WiFi101.h>
+// --- Motor Pin Definitions ---
+const int WINC_CS  = 8, WINC_IRQ = 7, WINC_RST = 4, WINC_EN = 2;
+
+// Assign PWM (speed) and DIR (direction) pins for each motor
+const int FL_PWM = 6,   FL_DIR = 5;   // Front Left:  E=6,  M=5
+const int FR_PWM = 9,   FR_DIR = 10;  // Front Right: E=9,  M=10
+const int BL_PWM = A4,  BL_DIR = A5;  // Back Left:   E=A4, M=A5
+const int BR_PWM = 11,  BR_DIR = 12;  // Back Right:  E=11, M=12
+
+
+
+
+
+// --- Variables ---
+int motorSpeed = 90;           // Default speed for all motors (range: 0–255)
+char lastMotionCmd = 'x';   // Stores the last direction command (e.g., 'f' for forward)
+
+const char ssid[] = "FeatherAP";
+const char pass[] = "test1234";     // >= 8 chars for WPA2
+WiFiServer server(80);
+
+String ipToString(const IPAddress& ip) {
+  return String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
+}
+
+// --- Setup Function for Each Motor ---
+// Configures the direction and PWM pins for a motor
+void setupMotor(int pwm, int dir) {
+  pinMode(pwm, OUTPUT);  // Set PWM pin as output
+  pinMode(dir, OUTPUT);  // Set direction pin as output
+}
+
+// --- Function to Drive a Motor ---
+// 'speed' determines how fast, 'forward' determines direction
+void setMotor(int pwm, int dir, int speed, bool forward) {
+  digitalWrite(dir, forward ? HIGH : LOW); // set direction
+  analogWrite(pwm, speed);                  // Set speed using PWM
+}
+
+
+
+// --- Arduino Setup Function ---
+// Runs once when the board powers up or resets
+void setup() {
+  Serial.begin(115200);  // Start serial communication at 9600 bps
+
+  WiFi.setPins(WINC_CS, WINC_IRQ, WINC_RST, WINC_EN);
+
+
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WINC1500 not detected"); while (1) {}
+  }
+
+    Serial.print("FW: "); Serial.println(WiFi.firmwareVersion());
+
+
+  Serial.println("Starting AP…");
+  int s = WiFi.beginAP(ssid, pass, 6);            // WPA2, ch 6
+  if (s != WL_AP_LISTENING) {
+    Serial.print("WPA2 AP failed ("); Serial.print(s); Serial.println("). Trying OPEN…");
+    s = WiFi.beginAP(ssid, 6);                    // OPEN AP fallback
+    if (s != WL_AP_LISTENING) { Serial.println("AP failed"); while (1) {} }
+  }
+
+  delay(8000); // let AP + DHCP come up
+
+   Serial.print("AP IP: "); Serial.println(ipToString(WiFi.localIP())); // usually 192.168.1.1
+  server.begin();
+
+
+  // Initialize all four motors
+  setupMotor(FL_PWM, FL_DIR);
+  setupMotor(FR_PWM, FR_DIR);
+  setupMotor(BR_PWM, BR_DIR);
+  setupMotor(BL_PWM, BL_DIR);
+  //Add your code to control the other motors.
+
+  // Stop all motors initially
+  stopAllMotors();
+
+  // delay(3000);  // Wait for 3 seconds before starting
+
+  // printInstructions();  // Print help message to the Serial Monitor
+}
+
+
+
+// --- Main Loop ---
+// Keeps running in a loop after setup() finishes
+// void loop() {
+//   // Check if data is available from Serial (USB) input
+//   if (Serial.available()) {
+//     // Read input string from user until newline
+//     String input = Serial.readStringUntil('\n');
+//     input.trim();  // Remove whitespace and newline characters
+
+//     if (input.length() == 0) return;  // Ignore empty input
+
+//     Serial.print("Command: ");
+//     Serial.println(input);
+
+//     // --- Handle Speed Change (e.g., "s150") ---
+//     if (input.charAt(0) == 's') {
+//       int newSpeed = input.substring(1).toInt();  // Extract number after 's'
+
+//       // Speed must be in the 0–255 range
+//       if (newSpeed >= 0 && newSpeed <= 255) {
+//         Serial.print("Received: Setting speed to ");
+//         Serial.println(newSpeed);
+//         motorSpeed = newSpeed;
+
+//         // Repeat last movement with new speed
+//         input = String(lastMotionCmd);  // Reuse the last motion command
+//       } else {
+//         Serial.println("Received: Invalid speed value (0–255 allowed)");
+//         return;
+//       }
+//     }
+
+//     // Extract the actual command (first character)
+//     char cmd = input.charAt(0);
+
+//     // Save the motion command (so we can reuse it later)
+//     if (cmd == 'f' || cmd == 'b' || cmd == 'l' || cmd == 'r' ||
+//         cmd == 'q' || cmd == 'e' || cmd == 'x') {
+//       lastMotionCmd = cmd;
+//     }
+//     // --- Motion Commands Switch ---
+//     switch (cmd) {
+//       case 'f': moveForward(); break;
+//       case 'x':
+//         stopAllMotors();  // Stop everything
+//         Serial.println("Stopped.");
+//         break;
+//       case 'b':moveBackward();break;
+//       case 'r':moveRight();break;
+//       case 'l':moveLeft();break;
+//       case 'e':rotateCounterClockwise();break;
+//       case 'q':rotateClockwise();break;
+//       default:
+//         Serial.println("Unknown command.");  // Unknown input
+//         printInstructions();                 // Show help again
+//         break;
+//     }
+//   }
+// }
+// --- Function to Stop All Motors ---
+void stopAllMotors() {
+  setMotor(FL_PWM, FL_DIR, 0, true); 
+  setMotor(FR_PWM, FR_DIR, 0, true);
+  setMotor(BR_PWM, BR_DIR, 0, true);
+  setMotor(BL_PWM, BL_DIR, 0, true);
+  Serial.println("Stopping all motors");
+   // Speed 0 = stop
+  //Add your code to control the other motors.
+}
+
+// --- Movement Functions (called when a motion command is received) ---
+// Move all motors forward
+void moveForward() {
+  setMotor(FL_PWM, FL_DIR, motorSpeed, false );
+  setMotor(FR_PWM, FR_DIR, motorSpeed, true );
+  setMotor(BR_PWM, BR_DIR, motorSpeed, true );
+  setMotor(BL_PWM, BL_DIR, motorSpeed, false );
+  //Add your code to control the other motors.
+  Serial.println("Moving forward");
+}
+
+void moveBackward() {
+  setMotor(FL_PWM, FL_DIR, motorSpeed, true);
+  setMotor(FR_PWM, FR_DIR, motorSpeed, false);
+  setMotor(BR_PWM, BR_DIR, motorSpeed, false );
+  setMotor(BL_PWM, BL_DIR, motorSpeed, true);
+  Serial.println("Moving backward");
+}
+
+void moveRight() {
+  setMotor(FL_PWM, FL_DIR ,motorSpeed, false);
+  setMotor(BL_PWM, BL_DIR, motorSpeed, false );
+  setMotor(FR_PWM, FR_DIR, motorSpeed-40, true);
+  setMotor(BR_PWM, BR_DIR, motorSpeed-40, true);
+}
+
+void moveLeft() {
+  setMotor(FR_PWM, FR_DIR, motorSpeed, true);
+  setMotor(BR_PWM, BR_DIR, motorSpeed, true);
+  setMotor(BL_PWM, BL_DIR, motorSpeed-40, false);
+  setMotor(FL_PWM, FL_DIR, motorSpeed-40,false);
+}
+
+void rotateCounterClockwise(){
+  setMotor(FL_PWM, FL_DIR, motorSpeed, true);
+  setMotor(FR_PWM, FR_DIR, motorSpeed, true);
+  setMotor(BR_PWM, BR_DIR, motorSpeed, true);
+  setMotor(BL_PWM, BL_DIR, motorSpeed, true);
+}
+
+void rotateClockwise(){
+  setMotor(FL_PWM, FL_DIR, motorSpeed, false);
+  setMotor(FR_PWM, FR_DIR, motorSpeed, false);
+  setMotor(BR_PWM, BR_DIR, motorSpeed, false);
+  setMotor(BL_PWM, BL_DIR, motorSpeed, false);
+}
+
+void moveSidewaysLeft(){
+  setMotor(FL_PWM, FL_DIR, motorSpeed, false);
+  setMotor(FR_PWM, FR_DIR, motorSpeed, false);
+  setMotor(BR_PWM, BR_DIR, motorSpeed, true);
+  setMotor(BL_PWM, BL_DIR, motorSpeed, true);
+}
+
+void moveSidewaysRight(){
+  setMotor(FL_PWM, FL_DIR, motorSpeed, true);
+  setMotor(FR_PWM, FR_DIR, motorSpeed, true);
+  setMotor(BR_PWM, BR_DIR, motorSpeed, false);
+  setMotor(BL_PWM, BL_DIR, motorSpeed, false);
+}
+
+
+
+// --- Print Available Commands to the Serial Monitor ---
+// void printInstructions() {
+//   Serial.println("\nEnter a command:");
+//   Serial.println("f = forward");
+//   Serial.println("b = backward");
+//   Serial.println("l = move left");
+//   Serial.println("r = move right");
+//   Serial.println("q = rotate counter clockwise (CCW)");
+//   Serial.println("e = rotate clockwise (CW)");
+//   Serial.println("x = stop all motors");
+//   Serial.println("s### = set speed (e.g., s200 for speed = 200)");
+// }
+
+
+void serve(WiFiClient& c){
+  c.setTimeout(1500);
+  String rl=c.readStringUntil('\n');        // "GET /path?query HTTP/1.1"
+  int sp1=rl.indexOf(' '), sp2=rl.indexOf(' ',sp1+1);
+  String uri=(sp1>0&&sp2>sp1)?rl.substring(sp1+1,sp2):"/";
+  int q=uri.indexOf('?'); String pth=(q>=0)?uri.substring(0,q):uri; String qry=(q>=0)?uri.substring(q+1):"";
+  while(true){ String h=c.readStringUntil('\n'); if(h.length()==0||h=="\r") break; } // headers
+  route(c,pth,qry);
+}
+
+void route(WiFiClient& c,const String& path,const String& q){
+  if(path=="/"||path=="") { handleRoot(c); return; }
+  if(path=="/forward")    { handleForward(c); return; }
+  if(path=="/stop")      {stop(c); return;}
+  if(path=="/backwards") {handleBackward(c); return;}
+  if(path=="/left")       {handleLeft(c); return;}
+  if(path=="/right")      {handleRight(c); return;}
+  if(path=="/clockwise") {handleClockwise(c); return;}
+  if(path=="/counterclockwise") {handleCounterClockwise(c); return;}  
+  if(path.startsWith("/setspeed")) { handleSetSpeed(c, q); return; }
+  // sendText(c,"404\n");
+}
+
+void handleRoot(WiFiClient& client){
+  // Minimal well-formed HTTP response
+   const char body[] =
+    "<!DOCTYPE html>"
+    "<html>"
+    "<head><title>Robot Control</title></head>"
+    "<body style='font-family: sans-serif; text-align: center;'>"
+    "<h2>Wi-Fi Robot Control</h2>"
+    "<button style='font-size:20px; padding:10px 20px; margin:10px;' "
+    "onclick=\"fetch('/forward')\">forward</button>"
+    "<button style='font-size:20px; padding:10px 20px; margin:10px;' "
+    "onclick=\"fetch('/stop')\">stop</button>"
+    "<button style='font-size:20px; padding:10px 20px; margin:10px;' "
+    "onclick=\"fetch('/backwards')\">backwards</button>"
+    "<button style='font-size:20px; padding:10px 20px; margin:10px;' "
+    "onclick=\"fetch('/left')\">left</button>"
+    "<button style='font-size:20px; padding:10px 20px; margin:10px;' "
+    "onclick=\"fetch('/right')\">right</button>"
+    "<button style='font-size:20px; padding:10px 20px; margin:10px;' "
+    "onclick=\"fetch('/clockwise')\">clockwise</button>""<button style='font-size:20px; padding:10px 20px; margin:10px;' "
+    "onclick=\"fetch('/counterclockwise')\">counterclockwise</button>"
+
+    "<div class='speed-box'>"
+    "<h3>Speed Control</h3>"
+    "<input id='speedInput' type='number' min='0' max='255' value='150'>"
+    "<button class='button' onclick='setSpeed()'>Set Speed</button>"
+    "</div>"
+
+    "<script>"
+    "function setSpeed() {"
+    "  const val = document.getElementById('speedInput').value;"
+    "  fetch('/setspeed?value=' + val)"
+    "    .then(r => console.log('Speed set toa', val))"
+    "    .catch(err => console.error(err));"
+    "}"
+    "</script>"
+
+
+    "</body>"
+    "</html>";
+
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: text/html\r\n");
+  client.print("Connection: close\r\n");
+  // client.print(strlen(body));
+  client.print("Content-Length: "); client.print(sizeof(body) - 1); client.print("\r\n\r\n");
+  client.print(body);
+    delay(1);
+}
+
+void handleForward(WiFiClient& client){
+  moveForward();
+    // Minimal well-formed HTTP response
+  const char body[] = "Moved Forward";
+
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: text/html\r\n");
+  client.print("Connection: close\r\n");
+  client.print("Content-Length: "); client.print(sizeof(body) - 1); client.print("\r\n\r\n");
+  client.print(body);
+    delay(1);
+}
+
+void stop(WiFiClient& client){
+  stopAllMotors();
+  delay(1);
+    
+}
+
+void handleBackward(WiFiClient& client){
+  moveBackward();
+  delay(1);
+}
+
+void handleLeft(WiFiClient& client){
+  moveLeft();
+  delay(1);
+}
+
+void handleRight(WiFiClient& client){
+  moveRight();
+  delay(1);
+}
+
+void handleClockwise(WiFiClient& client){
+  rotateClockwise();
+  delay(1);
+}
+
+void handleCounterClockwise(WiFiClient& client){
+  rotateCounterClockwise();
+  delay(1);
+}
+
+void handleSetSpeed(WiFiClient& client, const String& path) {
+  int newSpeed = 90;
+  int index = path.indexOf("value=");
+
+  if (index != -1) {
+    newSpeed = path.substring(index + 6).toInt();
+  }
+
+  if (newSpeed >= 0 && newSpeed <= 255) {
+    Serial.print("Received: Setting speed to ");
+    Serial.println(newSpeed);
+    motorSpeed = newSpeed;
+  }
+}
+
+void loop() {
+  WiFiClient client = server.available();
+  if (!client) return;
+
+  client.setTimeout(2000); // 2s read timeout
+  serve(client);
+  client.stop();
+}

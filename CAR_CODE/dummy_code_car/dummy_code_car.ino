@@ -469,7 +469,9 @@ void loop() {
 
 
   getDistanceCM();
-  // emergencyStop();
+  emergencyStop();
+
+  
   if(autolinemodeon){
   autoLineFollowing();
 
