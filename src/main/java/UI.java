@@ -55,54 +55,6 @@ public class UI extends Application {
 
 
 
-    // Annoying request nonsense. Actual GUI below
-
-    private static final String URL =
-        "https://deloreg.com/generate_AMOGUS_WILL_EAT_YOUR_SOUL";
-    private static Message sendToLocalModel(ObservableList<Message> messages)
-                                                        throws Exception {
-        String jsonBody = buildJson(messages);
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(URL))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-        HttpResponse<String> response =
-                client.send(request, HttpResponse.BodyHandlers.ofString());
-        String body = response.body();
-        return new Message("assistant", body);
-    }
-    private static String buildJson(ObservableList<Message> messages) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\"messages\":[");
-        for (int i = 0; i < messages.size(); i++) {
-            Message m = messages.get(i);
-            if (i > 0) sb.append(',');
-            sb.append("{\"role\":\"")
-              .append(escape(m.role()))
-              .append("\",\"content\":\"")
-              .append(escape(m.content()))
-              .append("\"}");
-        }
-        sb.append("]}");
-        return sb.toString();
-    }
-    private static String escape(String s) {
-        if (s == null) return "";
-        return s
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r");
-    }
-
-
-
-    // Actual GUI
-
-
-
     // State. There is **no** state in the application other than this
     // I don't fw oop. I only code React
     // PS: I don't actually code React. I only code Svelte
@@ -117,16 +69,12 @@ public class UI extends Application {
         MANUAL
     }
 
-    record Message(String role, String content) {}
-
     class State {
         // I don't fw getter or setters either
         public final ObjectProperty<Transmission> transmission =
             new SimpleObjectProperty<>(Transmission.AUTOMATIC);
         public final ObjectProperty<Screen> currentScreen =
             new SimpleObjectProperty<>(Screen.HOME);
-        public final ObservableList<Message> messages =
-            FXCollections.observableArrayList();
     }
 
 
@@ -241,71 +189,6 @@ public class UI extends Application {
         view.getChildren().add(mainMap);
         // TODO: Add the map
 
-        // The AI chat application
-        // NOTE: The AI chat application will be removed in future releases
-        // due to the fact there's no connection when controlling the clanker
-        VBox chat = new VBox();
-        view.getChildren().add(chat);
-
-        // The AI chat application - Title
-        Label chatTitle = new Label("Chat with our AI assistant - Emi");
-        chat.getChildren().add(chatTitle);
-
-        // The AI chat application - Messages
-        ListView<Message> listView = new ListView<>();
-        chat.getChildren().add(listView);
-        listView.setItems(state.messages);
-        listView.setCellFactory(lv -> new ListCell<>() {
-            @Override
-            protected void updateItem(Message msg, boolean empty) {
-                super.updateItem(msg, empty);
-                if (empty || msg == null || msg.role().equals("system")) {
-                    setText(null);
-                    setGraphic(null);
-                } else {
-                    setText(msg.content());
-                    if (msg.role().equals("user")) {
-                        // TODO: style for the user
-                    } else {
-                        // TODO: style for the assistant
-                    }
-                }
-            }
-        });
-
-        // The AI chat application - Your message field
-        HBox sendField = new HBox();
-        chat.getChildren().add(sendField);
-
-        TextField inputField = new TextField();
-        sendField.getChildren().add(inputField);
-
-        Button sendButton = new Button("Send");
-        sendField.getChildren().add(sendButton);
-        sendButton.setOnAction(e -> {
-            String text = inputField.getText().trim();
-            if (text.isEmpty()) return;
-
-            state.messages.add(new Message("user", text));
-            inputField.clear();
-
-            // Scroll to bottom when new message added
-            listView.scrollTo(state.messages.size() - 1);
-
-            try {
-                Message reply = sendToLocalModel(state.messages);
-                state.messages.add(reply);
-            } catch (Exception g) {
-                return;
-            }
-
-            // Scroll to bottom when new message added
-            listView.scrollTo(state.messages.size() - 1);
-
-            
-        });
-        inputField.setOnAction(sendButton.getOnAction());
-
         return root;
     }
 
@@ -322,11 +205,6 @@ public class UI extends Application {
 
         
         State state = new State();
-        state.messages.add(new Message("system", "You are a silly little "
-            + "uwu AI assistant that is at the same time cute and egotistical. "
-            + "You commnicate with incomprehensible cute yet offensive slang like "
-            + "you keep yeeting at them noobs hehe~ :D You keep your responses "
-            + "short, casual and not very informative"));
 
         // Static view creation. The objects will be preserved for the entire
         // duration of the program
