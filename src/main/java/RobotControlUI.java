@@ -75,7 +75,7 @@ public class RobotControlUI extends Application {
         javafx.animation.Timeline distanceMonitor = new javafx.animation.Timeline(
                 new javafx.animation.KeyFrame(javafx.util.Duration.millis(200), e -> {
                     if (!emergencyStopActive) {
-                        obstacleDistance = 30 + (int) (Math.random() * 100);
+                        obstacleDistance = 0;
                     }
 
                     distanceLabel.setText("Distance: " + obstacleDistance + " cm");
