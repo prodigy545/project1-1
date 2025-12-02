@@ -295,7 +295,7 @@ controlPanel.getChildren().addAll(title, new Separator(), modeToggleSection,
             isAutoLineMode = true;
             updateModeLabel();
             updateModeToggleButton();
-        });
+        });//b
 
         Button autoLineOff = new Button("Stop Auto Line");
         autoLineOff.setStyle("-fx-background-color: #ff0000ff; -fx-text-fill: white;");
