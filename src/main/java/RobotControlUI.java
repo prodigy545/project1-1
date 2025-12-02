@@ -27,16 +27,12 @@ public class RobotControlUI extends Application {
             .build();
 
     // Robot state
-    private double robotX = 300; // Center of canvas
-    private double robotY = 300;
-    private double robotAngle = 0; // In degrees
     private int currentSpeed = 90;
     private int obstacleDistance = 100; // Distance to obstacle in cm
     private boolean emergencyStopActive = false;
 
     // UI Components
-    private Canvas mapCanvas;
-    private GraphicsContext gc;
+    private Label modeToggleLabel;
     private ListView<String> historyList;
     private ObservableList<String> historyItems;
     private Label statusLabel;
@@ -47,7 +43,6 @@ public class RobotControlUI extends Application {
 
     // State tracking
     private boolean isAutoLineMode = false;
-    private ToggleButton modeToggleButton;
 
     @Override
     public void start(Stage stage) {
@@ -68,9 +63,6 @@ public class RobotControlUI extends Application {
         Scene scene = new Scene(root, 1400, 800);
         stage.setTitle("Robot Control ");
         stage.setScene(scene);
-        stage.setOnCloseRequest(e -> {
-            sendCommand("/stop", "Emergency Stop (App Closed)");
-        });
         stage.show();
 
     
@@ -102,11 +94,7 @@ public class RobotControlUI extends Application {
         distanceLabel = new Label("Distance: " + obstacleDistance + " cm");
         emergencyLabel = new Label("Emergency Stop: OFF");
 
-        statusBar.getChildren().addAll(statusLabel, new Separator(Orientation.VERTICAL),
-                speedLabel, new Separator(Orientation.VERTICAL),
-                modeLabel, new Separator(Orientation.VERTICAL),
-                distanceLabel, new Separator(Orientation.VERTICAL),
-                emergencyLabel);
+        statusBar.getChildren().addAll(statusLabel, speedLabel, modeLabel, distanceLabel,emergencyLabel);
         return statusBar;
     }
 
@@ -125,65 +113,43 @@ public class RobotControlUI extends Application {
         VBox speedSection = createSpeedSection();
         VBox autoLineSection = createAutoLineSection();
 
-        Button emergencyStop = new Button("EMERGENCY STOP");
-        emergencyStop.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white; " +
-                "-fx-font-size: 16px; -fx-font-weight: bold;");
-        emergencyStop.setPrefWidth(250);
-        emergencyStop.setPrefHeight(50);
-        emergencyStop.setOnAction(e -> {
-            sendCommand("/stop", "EMERGENCY STOP");
-            isAutoLineMode = false;
-            updateModeLabel();
-            updateModeToggleButton();
-        });
 
-        controlPanel.getChildren().addAll(title, new Separator(), modeToggleSection,
+controlPanel.getChildren().addAll(title, new Separator(), modeToggleSection,
                 new Separator(), basicMovement,
                 new Separator(), rotationSection,
                 new Separator(), sidewaysSection,
                 new Separator(), speedSection,
-                new Separator(), autoLineSection,
-                new Separator(), emergencyStop);
+                new Separator(), autoLineSection);
 
         ScrollPane scrollPane = new ScrollPane(controlPanel);
         scrollPane.setFitToWidth(true);
 
         VBox wrapper = new VBox(scrollPane);
         return wrapper;
-    }
+
+        };
+
+       
+    
 
     private VBox createModeToggleSection() {
         VBox section = new VBox(10);
         Label label = new Label("Operation Mode");
         label.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
 
-        modeToggleButton = new ToggleButton("Switch to Automatic Mode");
-        modeToggleButton.setPrefWidth(250);
-        modeToggleButton.setPrefHeight(40);
+        modeToggleLabel= new Label((isAutoLineMode) ? "Automatic Mode" : "Manual Mode");
+        modeToggleLabel.setPrefWidth(250);
+        modeToggleLabel.setPrefHeight(40);
 
-        modeToggleButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; " +
-                "-fx-font-size: 14px; -fx-font-weight: bold;");
+        updateModeToggleButton();
 
-        modeToggleButton.setOnAction(e -> {
-            if (modeToggleButton.isSelected()) {
-                isAutoLineMode = true;
-                modeToggleButton.setText("Switch to Manual Mode");
-                modeToggleButton.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; " +
-                        "-fx-font-size: 14px; -fx-font-weight: bold;");
-                sendCommand("/autolineon", "Switched to Automatic Mode");
-            } else {
-                isAutoLineMode = false;
-                modeToggleButton.setText("Switch to Automatic Mode");
-                modeToggleButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; " +
-                        "-fx-font-size: 14px; -fx-font-weight: bold;");
-                sendCommand("/autolineoff", "Switched to Manual Mode");
-            }
-            updateModeLabel();
-        });
-
-        section.getChildren().addAll(label, modeToggleButton);
+        section.getChildren().addAll(label, modeToggleLabel);
         return section;
-    }
+
+        };
+    
+    
+
 
     private VBox createMovementSection() {
         VBox section = new VBox(10);
@@ -208,14 +174,12 @@ public class RobotControlUI extends Application {
         Button left = createControlButton("←", "Left");
         left.setOnAction(e -> {
             sendCommand("/left", "Turn Left");
-            robotAngle -= 15;
 
         });
 
         Button right = createControlButton("→", "Right");
         right.setOnAction(e -> {
             sendCommand("/right", "Turn Right");
-            robotAngle += 15;
 
         });
 
@@ -249,14 +213,12 @@ public class RobotControlUI extends Application {
         Button clockwise = createControlButton("↻", "Clockwise");
         clockwise.setOnAction(e -> {
             sendCommand("/clockwise", "Rotate Clockwise");
-            robotAngle += 30;
 
         });
 
         Button counterClockwise = createControlButton("↺", "Counter-Clockwise");
         counterClockwise.setOnAction(e -> {
             sendCommand("/counterclockwise", "Rotate Counter-Clockwise");
-            robotAngle -= 30;
 
         });
 
@@ -336,7 +298,7 @@ public class RobotControlUI extends Application {
         });
 
         Button autoLineOff = new Button("Stop Auto Line");
-        autoLineOff.setStyle("-fx-background-color: #e67e22; -fx-text-fill: white;");
+        autoLineOff.setStyle("-fx-background-color: #ff0000ff; -fx-text-fill: white;");
         autoLineOff.setOnAction(e -> {
             sendCommand("/autolineoff", "Auto Line Following OFF");
             isAutoLineMode = false;
@@ -386,7 +348,7 @@ public class RobotControlUI extends Application {
 
 
     private void sendCommand(String endpoint, String action) {
-        Platform.runLater(() -> statusLabel.setText("Status: Sending command..."));
+
 
         new Thread(() -> {
             try {
@@ -430,17 +392,16 @@ public class RobotControlUI extends Application {
     }
 
     private void updateModeToggleButton() {
-        if (modeToggleButton != null) {
+         if (modeToggleLabel != null) {
             if (isAutoLineMode) {
-                modeToggleButton.setSelected(true);
-                modeToggleButton.setText("Switch to Manual Mode");
-                modeToggleButton.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; " +
-                        "-fx-font-size: 14px; -fx-font-weight: bold;");
-            } else {
-                modeToggleButton.setSelected(false);
-                modeToggleButton.setText("Switch to Automatic Mode");
-                modeToggleButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; " +
-                        "-fx-font-size: 14px; -fx-font-weight: bold;");
+             modeToggleLabel.setText("Automatic Mode");
+             modeToggleLabel.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; " +
+                    "-fx-font-size: 14px; -fx-font-weight: bold;");  
+            }else {
+            modeToggleLabel.setText("Manual Mode");
+            modeToggleLabel.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; " +
+                    "-fx-font-size: 14px; -fx-font-weight: bold;");
+        
             }
         }
     }
