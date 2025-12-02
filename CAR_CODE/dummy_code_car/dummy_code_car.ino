@@ -213,7 +213,7 @@ long getDistanceCM(){
 
 
 void emergencyStop(){
-  if( (lastMotionCmd == 'f' || lastMotionCmd == 'r' || lastMotionCmd == 'l') && getDistanceCM()<45){
+  if( (lastMotionCmd == 'f' || lastMotionCmd == 'r' || lastMotionCmd == 'l') && getDistanceCM()<5){
     stopAllMotors();
   }
 }
@@ -461,11 +461,6 @@ void handleAutolineOff(WiFiClient& client){
  
 
 void loop() {
-  irLeftAnalog = analogRead(PIN_IR_LEFT_ANALOG);
-  irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
-
-  // Serial.print("Left A="); Serial.print(irLeftAnalog);
-  // Serial.print("Right A="); Serial.print(irRightAnalog);
 
 
   getDistanceCM();
