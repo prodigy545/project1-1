@@ -25,8 +25,8 @@ import java.util.concurrent.CompletableFuture;
 
 public class RobotControlUI extends Application {
 
-    // private static final String BASE_URL = "http://192.168.1.1";
-    private static final String BASE_URL = "http://127.0.0.1:5000";
+    private static final String BASE_URL = "http://192.168.1.1";
+    // private static final String BASE_URL = "http://127.0.0.1:5000";
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
