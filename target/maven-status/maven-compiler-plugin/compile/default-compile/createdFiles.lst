@@ -1,6 +1,2 @@
-UI.class
-UI$State.class
+RobotControlUI.class
 ArduinoClient.class
-UI$Screen.class
-UI$Message.class
-UI$1.class
