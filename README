@@ -1,0 +1,6 @@
+Flush the car with CAR_CODE/car_node_2/car_node_2.ino code
+Then compile the maven priject with: mvn clean compile
+Then connect to the FeatherAP wifi with a password test1234
+Then run the GUI application with: mvn javafx:run
+You should now be able to control the robot with the gui app as well as to put it in a self driving mode
+
