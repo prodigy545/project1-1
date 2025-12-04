@@ -41,7 +41,7 @@ public class RobotControlUI extends Application {
     private Label distanceLabel;
     private Label emergencyLabel;
 
-    // State tracking
+    
     private boolean isAutoLineMode = false;
 
     @Override
@@ -51,13 +51,13 @@ public class RobotControlUI extends Application {
         BorderPane root = new BorderPane();
         root.setPadding(new Insets(10));
 
-        // Top - Status bar
+        
         root.setTop(createStatusBar());
 
-        // Left - Control Panel
+        
         root.setLeft(createControlPanel());
 
-        // Right - History panel
+    
         root.setRight(createHistoryPanel());
 
         Scene scene = new Scene(root, 1400, 800);
@@ -67,7 +67,7 @@ public class RobotControlUI extends Application {
 
     
 
-        // Start monitoring distance and emergency stop
+    
         startDistanceMonitoring();
     }
 
