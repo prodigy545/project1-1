@@ -30,7 +30,7 @@ bool manualMode = true;
 float Ki = 0.2;
 float Kd = 1.5;
 float Kp = 5.0;
-int lineFollowBaseSpeed = 67;
+int lineFollowBaseSpeed = 73;
 
 float error = 0;
 float lastError = 0;
