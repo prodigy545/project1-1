@@ -219,8 +219,14 @@ public class RobotControlUI extends Application {
         gc.setFill(Color.RED);
         double rSize = 15;
         gc.fillPolygon(
-            new double[]{-rSize, -rSize, rSize},
-            new double[]{-rSize, rSize, 0},
+            new double[]{-rSize, 0 , rSize},
+            new double[]{-rSize, 0 , 0},
+            3
+        );
+
+        gc.fillPolygon(
+            new double[]{-rSize, 0 , rSize},
+            new double[]{rSize, 0 , 0},
             3
         );
 

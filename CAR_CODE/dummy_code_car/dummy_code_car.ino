@@ -443,6 +443,8 @@ void route(WiFiClient& c,const String& path,const String& q){
   if(path=="/kidnappedstart") { handleKidnappedStart(c); return; }   // ADD THIS
   if(path=="/kidnappedstop") { handleKidnappedStop(c); return; }     // ADD THIS
   if(path.startsWith("/setspeed")) {handleSetSpeed(c, q); return;}
+  if(path=="/getdata") { handleGetData(c); return; }
+
   // sendText(c,"404\n");
 }
 
@@ -646,6 +648,28 @@ void handleKidnappedStop(WiFiClient& client) {
   client.print(body);
 }
 
+double pos_x = 0.0, pos_y = 0.0, angle_rad = 1.5707963267948966;
+
+void handleGetData(WiFiClient& client) {
+  // const char body[] = String(pos_x) + "\n" + String(pos_y) + "\n" + String(angle_rad) + "\n";
+  char body[200] = {};
+  snprintf(body, sizeof(body), "%f\n%f\n%f\n", pos_x, pos_y, angle_rad);
+
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: text/html\r\n");
+  client.print("Connection: close\r\n");
+  int len = strlen(body);
+  client.print("Content-Length: ");
+  client.print(len);
+  client.print("\r\n\r\n");
+  client.print(body);
+}
+
+
+
+#define TIME_TO_COMPLETE_THE_FULL_CIRCLE_IN_SECONDS 5
+#define TIME_TO_COMPLETE_A_ROTAION 3
+#define CRAB_MULTIPLYER (0.5)
 
  
 
@@ -663,7 +687,38 @@ void loop() {
     // Manual control
   }
 
-
+  // Happens 20 times a second
+  if (lastMotionCmd == 's') {
+    // Does nothing
+  } else if (lastMotionCmd == 'f') {
+    pos_x += cos(angle_rad) * 0.05;
+    pos_y += sin(angle_rad) * 0.05;
+  } else if (lastMotionCmd == 'b') {
+    pos_x -= cos(angle_rad) * 0.05;
+    pos_y -= sin(angle_rad) * 0.05;
+  } else if (lastMotionCmd == 'sr') {
+    pos_x += cos(angle_rad - 1.5707963267948966) * 0.05 * CRAB_MULTIPLYER;
+    pos_y += sin(angle_rad - 1.5707963267948966) * 0.05 * CRAB_MULTIPLYER;
+  } else if (lastMotionCmd == 'sl') {
+    pos_x += cos(angle_rad + 1.5707963267948966) * 0.05 * CRAB_MULTIPLYER;
+    pos_y += sin(angle_rad + 1.5707963267948966) * 0.05 * CRAB_MULTIPLYER;
+  } else if (lastMotionCmd == 'c') {
+    angle_rad -= 6.283185307179586 / TIME_TO_COMPLETE_A_ROTAION / 20;
+  } else if (lastMotionCmd == 'cc') {
+    angle_rad += 6.283185307179586 / TIME_TO_COMPLETE_A_ROTAION / 20;
+  } else if (lastMotionCmd == 'r') {
+    pos_x += cos(angle_rad) * 0.05 / 2;
+    pos_y += sin(angle_rad) * 0.05 / 2;
+    angle_rad -= 6.283185307179586 / TIME_TO_COMPLETE_THE_FULL_CIRCLE_IN_SECONDS / 20;
+    pos_x += cos(angle_rad) * 0.05 / 2;
+    pos_y += sin(angle_rad) * 0.05 / 2;
+  } else if (lastMotionCmd == 'l') {
+    pos_x += cos(angle_rad) * 0.05 / 2;
+    pos_y += sin(angle_rad) * 0.05 / 2;
+    angle_rad += 6.283185307179586 / TIME_TO_COMPLETE_THE_FULL_CIRCLE_IN_SECONDS / 20;
+    pos_x += cos(angle_rad) * 0.05 / 2;
+    pos_y += sin(angle_rad) * 0.05 / 2;
+  }
 
   WiFiClient client = server.available();
   // static unsigned long lastDebug = 0;
