@@ -19,22 +19,36 @@ const int ECHO_PIN = 1;
 
 
 // --- Variables ---
-int motorSpeed = 90;           // Default speed 
+int motorSpeed = 90;  
+// --- Search Specific Variables ---
+int searchForwardSpeed = 90;  // Slower speed for moving forward (0-255)
+int searchPivotSpeed = 110;   // Faster speed for pivoting (0-255)
+int searchTurnDuration = 1000; // Time in ms to turn 90 degrees (Lower this since speed is faster!)         // Default speed 
 char lastMotionCmd = 'x';   // Stores the last command 
 
 bool autolinemodeon = false;
 bool manualMode = true;
 
+const int LINE_DETECTED_THRESHOLD = 200;
+
+// State Machine Variables
+int searchState = 0;          // 0 = Moving Forward, 1 = Turning
+unsigned long searchTimer = 0; // Tracks when the current move started
 
 float Ki = 0.2;
 float Kd = 1.5;
 float Kp = 5.0;
-int lineFollowBaseSpeed = 67;
+int lineFollowBaseSpeed = 78;
 
 float error = 0;
 float lastError = 0;
 float Integral = 0;
 float Derivative = 0;
+
+bool searchMode = false;
+int searchStep = 0;
+int squareSize = 500;         // Start with small squares (500ms movement)
+int currentSide = 0; 
 
 int irLeftDigital = 0;
 int irRightDigital = 0;
@@ -219,7 +233,151 @@ void emergencyStop(){
 }
 
 
+// Check if either sensor sees a line
+bool foundLine() {
+  irLeftAnalog = analogRead(PIN_IR_LEFT_ANALOG);
+  irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
+  
+  bool lineFound = (irLeftAnalog > LINE_DETECTED_THRESHOLD || 
+                    irRightAnalog > LINE_DETECTED_THRESHOLD);
+  
+  if (lineFound) {
+    Serial.println("LINE FOUND!");
+    Serial.print("Left: "); Serial.print(irLeftAnalog);
+    Serial.print(" Right: "); Serial.println(irRightAnalog);
+  }
+  
+  return lineFound;
+}
 
+// Check if robot is lost (both sensors see white)
+bool isLost() {
+  irLeftAnalog = analogRead(PIN_IR_LEFT_ANALOG);
+  irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
+  
+  return (irLeftAnalog < LINE_DETECTED_THRESHOLD && 
+          irRightAnalog < LINE_DETECTED_THRESHOLD);
+}
+
+// Search for line using expanding squares
+void searchForLine() {
+  if (!searchMode) return;
+  
+  // --- 1. Constant Check for Line ---
+  // If found, stop everything immediately
+  if (foundLine()) {
+    Serial.println("=== SUCCESS! Switching to line following ===");
+    searchMode = false;
+    autolinemodeon = true;
+    manualMode = false;
+    stopAllMotors();
+    return;
+  }
+  
+  unsigned long currentTime = millis();
+
+  // --- 2. State Machine Logic ---
+  
+  // STATE 0: MOVING FORWARD
+  if (searchState == 0) {
+    // Drive Forward with custom SLOW speed
+    setMotor(FL_PWM, FL_DIR, searchForwardSpeed, false);
+    setMotor(FR_PWM, FR_DIR, searchForwardSpeed, true);
+    setMotor(BR_PWM, BR_DIR, searchForwardSpeed, true);
+    setMotor(BL_PWM, BL_DIR, searchForwardSpeed, false);
+
+    // Check if time is up for this side
+    if (currentTime - searchTimer > squareSize) {
+      stopAllMotors();
+      searchState = 1;         // Switch to Turning state
+      searchTimer = currentTime; // Reset timer
+    }
+  } 
+  
+  // STATE 1: TURNING (Pivoting)
+  else if (searchState == 1) {
+    // Pivot Clockwise with custom FAST speed
+    // Note: All motors set to 'false' for clockwise based on your rotateClockwise() function
+    setMotor(FL_PWM, FL_DIR, searchPivotSpeed, false);
+    setMotor(FR_PWM, FR_DIR, searchPivotSpeed, false);
+    setMotor(BR_PWM, BR_DIR, searchPivotSpeed, false);
+    setMotor(BL_PWM, BL_DIR, searchPivotSpeed, false);
+
+    // Check if time is up for the turn
+    if (currentTime - searchTimer > searchTurnDuration) {
+      stopAllMotors();
+      
+      // Setup for next forward move
+      searchState = 0;         // Switch back to Moving Forward
+      searchTimer = currentTime; // Reset timer
+      currentSide++;
+      
+      // Expand square logic
+      if (currentSide >= 4) {
+        currentSide = 0;
+        squareSize += 300;
+        Serial.print("=== Expanding search - size: ");
+        Serial.println(squareSize);
+        
+        // Safety limit (Search Timeout)
+        if (squareSize > 3000) {
+          Serial.println("=== SEARCH FAILED - Line not found ===");
+          searchMode = false;
+          stopAllMotors();
+        }
+      }
+    }
+  }
+}
+
+// Start the search
+void startKidnappedSearch() {
+  Serial.println("\n========== STARTING KIDNAPPED ROBOT SEARCH ==========");
+  searchMode = true;
+  autolinemodeon = false;
+  manualMode = false;
+  searchStep = 0;
+  squareSize = 500;
+  currentSide = 0;
+  searchState = 0;
+  searchTimer = millis();
+}
+
+// Auto-detect if robot was kidnapped
+void autoDetectKidnapped() {
+  static int lostCounter = 0;
+  static unsigned long lastLineSeenTime = 0;
+  
+  if (autolinemodeon && !searchMode) {
+    irLeftAnalog = analogRead(PIN_IR_LEFT_ANALOG);
+    irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
+    
+    // Check if AT LEAST ONE sensor sees the line (black tape)
+    bool canSeeLine = (irLeftAnalog > LINE_DETECTED_THRESHOLD || 
+                       irRightAnalog > LINE_DETECTED_THRESHOLD);
+    
+    if (canSeeLine) {
+      // Reset counter - we can still see the line
+      lostCounter = 0;
+      lastLineSeenTime = millis();
+    } else {
+      // Neither sensor sees black - might be lost
+      lostCounter++;
+      
+      // Only trigger if lost for 1 full second (20 cycles × 50ms = 1000ms)
+      if (lostCounter > 180) {
+        Serial.println("=== ROBOT KIDNAPPED! Starting search... ===");
+        Serial.print("Time since last line seen: ");
+        Serial.print(millis() - lastLineSeenTime);
+        Serial.println(" ms");
+        startKidnappedSearch();
+        lostCounter = 0;
+      }
+    }
+  } else {
+    lostCounter = 0; // Reset if not in auto-line mode
+  }
+}
 
 
 
@@ -228,18 +386,18 @@ void autoLineFollowing(){
       irLeftAnalog = analogRead(PIN_IR_LEFT_ANALOG);
       irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
       
-      // PID calculation 
+      
       error = irRightAnalog - irLeftAnalog;
       Derivative = error - lastError;
       Integral += error;
 
       float correction = Kp * error + Kd * Derivative + Ki* Integral; 
 
-      // Use base speed for line following
+      
       int leftMotorSpeed = lineFollowBaseSpeed + correction;
       int rightMotorSpeed = lineFollowBaseSpeed - correction;
 
-      // If statements instead of constrain
+      
       if (leftMotorSpeed > 90) leftMotorSpeed = 90;
       if (leftMotorSpeed < 0) leftMotorSpeed = 0;
       if (rightMotorSpeed > 90) rightMotorSpeed = 90;
@@ -272,7 +430,7 @@ void serve(WiFiClient& c){
 void route(WiFiClient& c,const String& path,const String& q){
   if(path=="/"||path=="") { handleRoot(c); return; }
   if(path=="/forward")    { handleForward(c); return; }
-  if(path=="/stop")      {autolinemodeon = false; manualMode = true; stop(c); return;}
+  if(path=="/stop")      {autolinemodeon = false; manualMode = true;     searchMode = false;  stop(c); return;}
   if(path=="/backwards") {handleBackwards(c); return;}
   if(path=="/left")       {handleLeft(c); return;}
   if(path=="/right")      {handleRight(c); return;}
@@ -281,7 +439,9 @@ void route(WiFiClient& c,const String& path,const String& q){
   if(path=="/movesidewaysright") {handleMoveSidewaysRight(c); return;}
   if(path=="/counterclockwise") {handleCounterClockwise(c); return;}
   if(path=="/autolineon") {autolinemodeon = true; manualMode = false; handleAutoLineOn(c); return;}
-  if(path=="/autolineoff") {autolinemodeon = false; manualMode = true; handleAutolineOff(c); return;} 
+  if(path=="/autolineoff") {autolinemodeon = false; manualMode = true; handleAutolineOff(c); return;}
+  if(path=="/kidnappedstart") { handleKidnappedStart(c); return; }   // ADD THIS
+  if(path=="/kidnappedstop") { handleKidnappedStop(c); return; }     // ADD THIS
   if(path.startsWith("/setspeed")) {handleSetSpeed(c, q); return;}
   // sendText(c,"404\n");
 }
@@ -458,30 +618,65 @@ void handleAutolineOff(WiFiClient& client){
 }
 
 
+void handleKidnappedStart(WiFiClient& client) {
+  startKidnappedSearch();
+  
+  const char body[] = "Kidnapped robot search started";
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: text/html\r\n");
+  client.print("Connection: close\r\n");
+  client.print("Content-Length: ");
+  client.print(sizeof(body) - 1);
+  client.print("\r\n\r\n");
+  client.print(body);
+}
+
+void handleKidnappedStop(WiFiClient& client) {
+  Serial.println("=== Search stopped manually ===");
+  searchMode = false;
+  stopAllMotors();
+  
+  const char body[] = "Search stopped";
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: text/html\r\n");
+  client.print("Connection: close\r\n");
+  client.print("Content-Length: ");
+  client.print(sizeof(body) - 1);
+  client.print("\r\n\r\n");
+  client.print(body);
+}
+
+
  
 
 void loop() {
-
-
   getDistanceCM();
   emergencyStop();
-
   
-  if(autolinemodeon){
-  autoLineFollowing();
-
-  }else if(manualMode){
-    
+  // Priority order: search > auto-line > manual
+  if (searchMode) {
+    searchForLine();           // Searching for line
+  } else if (autolinemodeon) {
+    autoDetectKidnapped();     // Check if robot got lost
+    autoLineFollowing();       // Normal line following
+  } else if (manualMode) {
+    // Manual control
   }
 
-  delay(50);
- 
+
 
   WiFiClient client = server.available();
+  // static unsigned long lastDebug = 0;
+  // irLeftAnalog = analogRead(PIN_IR_LEFT_ANALOG);
+  // irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
+  // Serial.print("L: "); Serial.print(irLeftAnalog);
+  // Serial.print(" | R: "); Serial.print(irRightAnalog);
+  // Serial.print(" | Search: "); Serial.println(searchMode ? "YES" : "NO");
+
   if (!client) return;
 
   client.setTimeout(2000); 
   serve(client);
   client.stop();
-} 
+}
 
