@@ -272,13 +272,15 @@ public class RobotControlUI extends Application {
         VBox sidewaysSection = createSidewaysSection();
         VBox speedSection = createSpeedSection();
         VBox autoLineSection = createAutoLineSection();
+        VBox kidnappedSection = createKidnappedRobotSection();
 
         controlPanel.getChildren().addAll(title, new Separator(), modeToggleSection,
                 new Separator(), basicMovement,
                 new Separator(), rotationSection,
                 new Separator(), sidewaysSection,
                 new Separator(), speedSection,
-                new Separator(), autoLineSection);
+                new Separator(), autoLineSection,
+                new Separator(), kidnappedSection);
 
         ScrollPane scrollPane = new ScrollPane(controlPanel);
         scrollPane.setFitToWidth(true);
@@ -463,6 +465,44 @@ public class RobotControlUI extends Application {
         section.getChildren().addAll(label, buttons);
         return section;
     }
+
+    private VBox createKidnappedRobotSection() {
+    VBox section = new VBox(10);
+    Label label = new Label("Kidnapped Robot Recovery");
+    label.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
+
+    // Status label
+    Label searchStatus = new Label("Status: Ready");
+    searchStatus.setStyle("-fx-font-size: 12px; -fx-text-fill: #2c3e50;");
+
+    // Control buttons
+    HBox buttons = new HBox(10);
+    buttons.setAlignment(Pos.CENTER);
+
+    Button startSearch = new Button("Start Search");
+    startSearch.setStyle("-fx-background-color: #e67e22; -fx-text-fill: white; -fx-font-weight: bold;");
+    startSearch.setPrefWidth(120);
+    startSearch.setOnAction(e -> {
+        sendCommand("/kidnappedstart", "Start Kidnapped Search");
+        searchStatus.setText("Status: Searching for line...");
+        searchStatus.setStyle("-fx-font-size: 12px; -fx-text-fill: #e67e22; -fx-font-weight: bold;");
+    });
+
+    Button stopSearch = new Button("Stop Search");
+    stopSearch.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white;");
+    stopSearch.setPrefWidth(120);
+    stopSearch.setOnAction(e -> {
+        sendCommand("/kidnappedstop", "Stop Search");
+        searchStatus.setText("Status: Stopped");
+        searchStatus.setStyle("-fx-font-size: 12px; -fx-text-fill: #c0392b;");
+    });
+
+    buttons.getChildren().addAll(startSearch, stopSearch);
+
+
+    section.getChildren().addAll(label, searchStatus, buttons,  new Separator());
+    return section;
+}
 
     private Button createControlButton(String symbol, String tooltip) {
         Button btn = new Button(symbol);
