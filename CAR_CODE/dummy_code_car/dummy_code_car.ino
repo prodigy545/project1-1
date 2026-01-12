@@ -397,15 +397,23 @@ void autoLineFollowing(){
       int rightMotorSpeed = lineFollowBaseSpeed - correction;
 
       
+      bool left_parity = false;
+      bool right_parity = true;
       if (leftMotorSpeed > 90) leftMotorSpeed = 90;
-      if (leftMotorSpeed < 0) leftMotorSpeed = 0;
+      if (leftMotorSpeed < 0) {
+        leftMotorSpeed = -leftMotorSpeed;
+        left_parity = !left_parity;
+      }
       if (rightMotorSpeed > 90) rightMotorSpeed = 90;
-      if (rightMotorSpeed < 0) rightMotorSpeed = 0;
+      if (rightMotorSpeed < 0) {
+        rightMotorSpeed = -rightMotorSpeed;
+        right_parity = !right_parity;
+      }
 
-      setMotor(FL_PWM, FL_DIR, leftMotorSpeed, false);
-      setMotor(FR_PWM, FR_DIR, rightMotorSpeed, true);
-      setMotor(BR_PWM, BR_DIR, rightMotorSpeed, true);
-      setMotor(BL_PWM, BL_DIR, leftMotorSpeed, false);
+      setMotor(FL_PWM, FL_DIR, leftMotorSpeed, left_parity);
+      setMotor(FR_PWM, FR_DIR, rightMotorSpeed, right_parity);
+      setMotor(BR_PWM, BR_DIR, rightMotorSpeed, right_parity);
+      setMotor(BL_PWM, BL_DIR, leftMotorSpeed, left_parity);
 
       lastError = error;
     } else {
