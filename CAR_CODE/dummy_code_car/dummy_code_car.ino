@@ -20,11 +20,11 @@ const int ECHO_PIN = 1;
 
 // --- Variables ---
 int motorSpeed = 90;  
-// --- Search Specific Variables ---
-int searchForwardSpeed = 90;  // Slower speed for moving forward (0-255)
-int searchPivotSpeed = 110;   // Faster speed for pivoting (0-255)
-int searchTurnDuration = 1000; // Time in ms to turn 90 degrees (Lower this since speed is faster!)         // Default speed 
-char lastMotionCmd = 'x';   // Stores the last command 
+
+int searchForwardSpeed = 110;  
+int searchPivotSpeed = 110;   
+int searchTurnDuration = 950; 
+char lastMotionCmd = 'x';   
 
 bool autolinemodeon = false;
 bool manualMode = true;
@@ -32,8 +32,8 @@ bool manualMode = true;
 const int LINE_DETECTED_THRESHOLD = 200;
 
 // State Machine Variables
-int searchState = 0;          // 0 = Moving Forward, 1 = Turning
-unsigned long searchTimer = 0; // Tracks when the current move started
+int searchState = 0;          
+unsigned long searchTimer = 0; 
 
 float Ki = 0.2;
 float Kd = 1.5;
@@ -47,7 +47,7 @@ float Derivative = 0;
 
 bool searchMode = false;
 int searchStep = 0;
-int squareSize = 500;         // Start with small squares (500ms movement)
+int squareSize = 500;         
 int currentSide = 0; 
 
 int irLeftDigital = 0;
@@ -226,7 +226,7 @@ long getDistanceCM(){
 
 
 void emergencyStop(){
-  if( (lastMotionCmd == 'f' || lastMotionCmd == 'r' || lastMotionCmd == 'l') && getDistanceCM()<5){
+  if( (lastMotionCmd == 'f' || lastMotionCmd == 'r' || lastMotionCmd == 'l') && getDistanceCM()<15){
     stopAllMotors();
   }
 }
@@ -286,7 +286,7 @@ void searchForLine() {
     setMotor(BL_PWM, BL_DIR, searchForwardSpeed, false);
 
     // Check if time is up for this side
-    if (currentTime - searchTimer > squareSize) {
+    if ((currentTime - searchTimer)/1.3> squareSize) {
       stopAllMotors();
       searchState = 1;         // Switch to Turning state
       searchTimer = currentTime; // Reset timer
@@ -319,7 +319,7 @@ void searchForLine() {
         Serial.println(squareSize);
         
         // Safety limit (Search Timeout)
-        if (squareSize > 3000) {
+        if (squareSize > 2000) {
           Serial.println("=== SEARCH FAILED - Line not found ===");
           searchMode = false;
           stopAllMotors();
@@ -336,7 +336,7 @@ void startKidnappedSearch() {
   autolinemodeon = false;
   manualMode = false;
   searchStep = 0;
-  squareSize = 500;
+  squareSize = 600;
   currentSide = 0;
   searchState = 0;
   searchTimer = millis();
@@ -364,7 +364,7 @@ void autoDetectKidnapped() {
       lostCounter++;
       
       // Only trigger if lost for 1 full second (20 cycles × 50ms = 1000ms)
-      if (lostCounter > 180) {
+      if (lostCounter > 300) {
         Serial.println("=== ROBOT KIDNAPPED! Starting search... ===");
         Serial.print("Time since last line seen: ");
         Serial.print(millis() - lastLineSeenTime);
@@ -842,7 +842,7 @@ void loop() {
   // irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
   // Serial.print("L: "); Serial.print(irLeftAnalog);
   // Serial.print(" | R: "); Serial.print(irRightAnalog);
-  // Serial.print(" | Search: "); Serial.println(searchMode ? "YES" : "NO");
+  
 
   if (!client) return;
 
