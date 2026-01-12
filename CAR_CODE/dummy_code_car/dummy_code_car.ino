@@ -57,7 +57,6 @@ int irRightAnalog = 0;
 
 
 
-
 const char ssid[] = "FeatherAP";
 const char pass[] = "test1234";     
 WiFiServer server(80);
@@ -443,10 +442,58 @@ void route(WiFiClient& c,const String& path,const String& q){
   if(path=="/kidnappedstart") { handleKidnappedStart(c); return; }   // ADD THIS
   if(path=="/kidnappedstop") { handleKidnappedStop(c); return; }     // ADD THIS
   if(path.startsWith("/setspeed")) {handleSetSpeed(c, q); return;}
-  if(path=="/getdata") { handleGetData(c); return; }
+  
+  if (path.startsWith("/setmap")) { handleSetMap(c, q); return; }
+  if (path == "/getdata") { handleGetData(c); return; }
+  
 
   // sendText(c,"404\n");
 }
+
+// Junction map inner awareness
+char memory[69] = {};
+
+void handleSetMap(WiFiClient& client, const String& path) {
+  int index = path.indexOf("value=");
+
+  // Default: empty map
+  memory[0] = '\0';
+
+  String value = "";
+  if (index != -1) {
+    value = path.substring(index + 6); // everything after "value="
+  }
+
+  // Stop at first separator if URL has more params like &foo=bar
+  int amp = value.indexOf('&');
+  if (amp != -1) value = value.substring(0, amp);
+
+  // Copy only R/L into memory, up to 68 chars (leave room for '\0')
+  int written = 0;
+  for (int i = 0; i < value.length() && written < 68; i++) {
+    char c = value.charAt(i);
+
+    // Accept lowercase too
+    if (c == 'r') c = 'R';
+    if (c == 'l') c = 'L';
+
+    if (c == 'R' || c == 'L') {
+      memory[written++] = c;
+    }
+  }
+  memory[written] = '\0';
+
+  Serial.print("Setting map to: ");
+  Serial.println(memory);
+
+  String body = "Map set to " + String(memory) + " (len=" + String(written) + ")";
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: text/html\r\n");
+  client.print("Connection: close\r\n");
+  client.print("Content-Length: "); client.print(body.length()); client.print("\r\n\r\n");
+  client.print(body);
+}
+
 
 void handleRoot(WiFiClient& client){
    const char body[] = "Select an option";
@@ -687,38 +734,99 @@ void loop() {
     // Manual control
   }
 
-  // Happens 20 times a second
-  if (lastMotionCmd == 's') {
-    // Does nothing
-  } else if (lastMotionCmd == 'f') {
-    pos_x += cos(angle_rad) * 0.05;
-    pos_y += sin(angle_rad) * 0.05;
-  } else if (lastMotionCmd == 'b') {
-    pos_x -= cos(angle_rad) * 0.05;
-    pos_y -= sin(angle_rad) * 0.05;
-  } else if (lastMotionCmd == 'sr') {
-    pos_x += cos(angle_rad - 1.5707963267948966) * 0.05 * CRAB_MULTIPLYER;
-    pos_y += sin(angle_rad - 1.5707963267948966) * 0.05 * CRAB_MULTIPLYER;
-  } else if (lastMotionCmd == 'sl') {
-    pos_x += cos(angle_rad + 1.5707963267948966) * 0.05 * CRAB_MULTIPLYER;
-    pos_y += sin(angle_rad + 1.5707963267948966) * 0.05 * CRAB_MULTIPLYER;
-  } else if (lastMotionCmd == 'c') {
-    angle_rad -= 6.283185307179586 / TIME_TO_COMPLETE_A_ROTAION / 20;
-  } else if (lastMotionCmd == 'cc') {
-    angle_rad += 6.283185307179586 / TIME_TO_COMPLETE_A_ROTAION / 20;
-  } else if (lastMotionCmd == 'r') {
-    pos_x += cos(angle_rad) * 0.05 / 2;
-    pos_y += sin(angle_rad) * 0.05 / 2;
-    angle_rad -= 6.283185307179586 / TIME_TO_COMPLETE_THE_FULL_CIRCLE_IN_SECONDS / 20;
-    pos_x += cos(angle_rad) * 0.05 / 2;
-    pos_y += sin(angle_rad) * 0.05 / 2;
-  } else if (lastMotionCmd == 'l') {
-    pos_x += cos(angle_rad) * 0.05 / 2;
-    pos_y += sin(angle_rad) * 0.05 / 2;
-    angle_rad += 6.283185307179586 / TIME_TO_COMPLETE_THE_FULL_CIRCLE_IN_SECONDS / 20;
-    pos_x += cos(angle_rad) * 0.05 / 2;
-    pos_y += sin(angle_rad) * 0.05 / 2;
+
+  // =======================
+  // ODOMETRY FROM REAL MOTOR PINS (DIR + PWM DUTY)
+  // Replaces the old lastMotionCmd-based position update.
+  // =======================
+
+  // For your wiring/parity (based on moveForward()):
+  // FL forward => dir LOW,  FR forward => dir HIGH
+  // BL forward => dir LOW,  BR forward => dir HIGH
+  const uint8_t FL_FWD_LEVEL = LOW;
+  const uint8_t FR_FWD_LEVEL = HIGH;
+  const uint8_t BL_FWD_LEVEL = LOW;
+  const uint8_t BR_FWD_LEVEL = HIGH;
+
+  // Cache PWM reads so pulseIn() doesn't stall WiFi handling too much
+  static unsigned long odoLastMs = 0;
+  static unsigned long pwmSampleLastMs = 0;
+  static uint8_t pwmFL = 0, pwmFR = 0, pwmBL = 0, pwmBR = 0;
+
+  auto readPwmDuty255 = [](uint8_t pwmPin) -> uint8_t {
+    // Measures PWM duty by timing HIGH/LOW pulses.
+    // Works even if the pin is configured as OUTPUT (Arduino reads back port state).
+    // Timeout tuned for ~490/980Hz PWM (period ~2.0ms / ~1.0ms).
+    const unsigned long TIMEOUT_US = 3500;
+
+    unsigned long hi = pulseIn(pwmPin, HIGH, TIMEOUT_US);
+    unsigned long lo = pulseIn(pwmPin, LOW,  TIMEOUT_US);
+
+    // If we couldn't measure a PWM cycle, treat it as DC HIGH/LOW
+    if (hi == 0 && lo == 0) {
+      return digitalRead(pwmPin) ? 255 : 0;
+    }
+    if (lo == 0) return 255;
+    if (hi == 0) return 0;
+
+    float duty = (float)hi / (float)(hi + lo);
+    int v = (int)(duty * 255.0f + 0.5f);
+    if (v < 0) v = 0;
+    if (v > 255) v = 255;
+    return (uint8_t)v;
+  };
+
+  auto signedWheel = [](uint8_t duty255, uint8_t dirPin, uint8_t fwdLevel) -> float {
+    int sign = (digitalRead(dirPin) == fwdLevel) ? +1 : -1;
+    return sign * ((float)duty255 / 255.0f); // [-1..+1]
+  };
+
+  unsigned long nowMs = millis();
+  if (odoLastMs == 0) odoLastMs = nowMs;
+  float dt = (nowMs - odoLastMs) * 0.001f;
+  odoLastMs = nowMs;
+
+  // Sample PWM duty only every 50ms (keeps loop responsive)
+  if (nowMs - pwmSampleLastMs >= 50) {
+    pwmSampleLastMs = nowMs;
+    pwmFL = readPwmDuty255(FL_PWM);
+    pwmFR = readPwmDuty255(FR_PWM);
+    pwmBL = readPwmDuty255(BL_PWM);
+    pwmBR = readPwmDuty255(BR_PWM);
   }
+
+  // Wheel "commanded actual" values from pins (normalized)
+  float wFL = signedWheel(pwmFL, FL_DIR, FL_FWD_LEVEL);
+  float wFR = signedWheel(pwmFR, FR_DIR, FR_FWD_LEVEL);
+  float wBL = signedWheel(pwmBL, BL_DIR, BL_FWD_LEVEL);
+  float wBR = signedWheel(pwmBR, BR_DIR, BR_FWD_LEVEL);
+
+  // Mecanum-ish kinematics in robot frame:
+  // vF = forward, vL = left, wZ = CCW
+  float vF = (wFL + wFR + wBL + wBR) * 0.25f;
+  float vL = (-wFL + wFR + wBL - wBR) * 0.25f;
+  float wZ = (-wFL + wFR - wBL + wBR) * 0.25f;
+
+  // Scale to your old "units":
+  // Previously: 0.05 units per tick at ~20Hz => ~1.0 units/sec at full speed.
+  const float MAX_UNITS_PER_SEC = 1.0f;
+
+  // Previously for rotation you used TIME_TO_COMPLETE_A_ROTAION (seconds for 2π).
+  const float MAX_RAD_PER_SEC = (6.283185307179586f / (float)TIME_TO_COMPLETE_A_ROTAION);
+
+  float vF_u = vF * MAX_UNITS_PER_SEC;
+  float vL_u = vL * MAX_UNITS_PER_SEC;
+  float wZ_r = wZ * MAX_RAD_PER_SEC;
+
+  // Integrate pose in world frame
+  angle_rad += wZ_r * dt;
+
+  float ca = cos(angle_rad);
+  float sa = sin(angle_rad);
+
+  pos_x += (ca * vF_u - sa * vL_u) * dt;
+  pos_y += (sa * vF_u + ca * vL_u) * dt;
+
 
   WiFiClient client = server.available();
   // static unsigned long lastDebug = 0;
