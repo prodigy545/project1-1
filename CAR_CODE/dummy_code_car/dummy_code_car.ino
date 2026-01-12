@@ -399,16 +399,16 @@ void autoLineFollowing(){
       
       bool left_parity = false;
       bool right_parity = true;
-      if (leftMotorSpeed > 90) leftMotorSpeed = 90;
       if (leftMotorSpeed < 0) {
         leftMotorSpeed = -leftMotorSpeed;
         left_parity = !left_parity;
       }
-      if (rightMotorSpeed > 90) rightMotorSpeed = 90;
+      if (leftMotorSpeed > 90) leftMotorSpeed = 90;
       if (rightMotorSpeed < 0) {
         rightMotorSpeed = -rightMotorSpeed;
         right_parity = !right_parity;
       }
+      if (rightMotorSpeed > 90) rightMotorSpeed = 90;
 
       setMotor(FL_PWM, FL_DIR, leftMotorSpeed, left_parity);
       setMotor(FR_PWM, FR_DIR, rightMotorSpeed, right_parity);
