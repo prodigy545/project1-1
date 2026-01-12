@@ -37,8 +37,8 @@
 
   float Ki = 0.2;
   float Kd = 1.5;
-  float Kp = 5.0;
-  int lineFollowBaseSpeed = 78;
+  float Kp = 5.5;
+  int lineFollowBaseSpeed = 79;
 
   float error = 0;
   float lastError = 0;
