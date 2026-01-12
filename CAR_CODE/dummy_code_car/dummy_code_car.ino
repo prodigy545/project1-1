@@ -385,7 +385,6 @@
         irLeftAnalog = analogRead(PIN_IR_LEFT_ANALOG);
         irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
         
-        
         error = irRightAnalog - irLeftAnalog;
         Derivative = error - lastError;
         Integral += error;
@@ -727,7 +726,7 @@
   #define CRAB_MULTIPLYER (0.5)
 
   
-
+  int frames_enlapsed_since_t_junction = 0;
   void loop() {
     getDistanceCM();
     emergencyStop();
@@ -742,35 +741,37 @@
       // Manual control
     }
 
+    irLeftAnalog = analogRead(PIN_IR_LEFT_ANALOG);
+    irRightAnalog = analogRead(PIN_IR_RIGHT_ANALOG);
+    if (irLeftAnalog > 450 && irRightAnalog > 450) {
+      frames_enlapsed_since_t_junction++;
+    } else {
+      frames_enlapsed_since_t_junction = 0;
+    }
 
-    // =======================
-    // ODOMETRY FROM REAL MOTOR PINS (DIR + PWM DUTY)
-    // Replaces the old lastMotionCmd-based position update.
-    // =======================
+    if (frames_enlapsed_since_t_junction > 5 && (autolinemodeon || searchMode)) {
+      searchMode = false;
+      autolinemodeon = false;
+      manualMode = true;
+    }
+    
 
-    // For your wiring/parity (based on moveForward()):
-    // FL forward => dir LOW,  FR forward => dir HIGH
-    // BL forward => dir LOW,  BR forward => dir HIGH
+
     const uint8_t FL_FWD_LEVEL = LOW;
     const uint8_t FR_FWD_LEVEL = HIGH;
     const uint8_t BL_FWD_LEVEL = LOW;
     const uint8_t BR_FWD_LEVEL = HIGH;
 
-    // Cache PWM reads so pulseIn() doesn't stall WiFi handling too much
     static unsigned long odoLastMs = 0;
     static unsigned long pwmSampleLastMs = 0;
     static uint8_t pwmFL = 0, pwmFR = 0, pwmBL = 0, pwmBR = 0;
 
     auto readPwmDuty255 = [](uint8_t pwmPin) -> uint8_t {
-      // Measures PWM duty by timing HIGH/LOW pulses.
-      // Works even if the pin is configured as OUTPUT (Arduino reads back port state).
-      // Timeout tuned for ~490/980Hz PWM (period ~2.0ms / ~1.0ms).
       const unsigned long TIMEOUT_US = 3500;
 
       unsigned long hi = pulseIn(pwmPin, HIGH, TIMEOUT_US);
       unsigned long lo = pulseIn(pwmPin, LOW,  TIMEOUT_US);
 
-      // If we couldn't measure a PWM cycle, treat it as DC HIGH/LOW
       if (hi == 0 && lo == 0) {
         return digitalRead(pwmPin) ? 255 : 0;
       }
@@ -794,7 +795,6 @@
     float dt = (nowMs - odoLastMs) * 0.001f;
     odoLastMs = nowMs;
 
-    // Sample PWM duty only every 50ms (keeps loop responsive)
     if (nowMs - pwmSampleLastMs >= 50) {
       pwmSampleLastMs = nowMs;
       pwmFL = readPwmDuty255(FL_PWM);
@@ -803,30 +803,23 @@
       pwmBR = readPwmDuty255(BR_PWM);
     }
 
-    // Wheel "commanded actual" values from pins (normalized)
     float wFL = signedWheel(pwmFL, FL_DIR, FL_FWD_LEVEL);
     float wFR = signedWheel(pwmFR, FR_DIR, FR_FWD_LEVEL);
     float wBL = signedWheel(pwmBL, BL_DIR, BL_FWD_LEVEL);
     float wBR = signedWheel(pwmBR, BR_DIR, BR_FWD_LEVEL);
 
-    // Mecanum-ish kinematics in robot frame:
-    // vF = forward, vL = left, wZ = CCW
     float vF = (wFL + wFR + wBL + wBR) * 0.25f;
     float vL = (-wFL + wFR + wBL - wBR) * 0.25f;
     float wZ = (-wFL + wFR - wBL + wBR) * 0.25f;
 
-    // Scale to your old "units":
-    // Previously: 0.05 units per tick at ~20Hz => ~1.0 units/sec at full speed.
     const float MAX_UNITS_PER_SEC = 1.0f;
 
-    // Previously for rotation you used TIME_TO_COMPLETE_A_ROTAION (seconds for 2π).
     const float MAX_RAD_PER_SEC = (6.283185307179586f / (float)TIME_TO_COMPLETE_A_ROTAION);
 
     float vF_u = vF * MAX_UNITS_PER_SEC;
     float vL_u = vL * MAX_UNITS_PER_SEC;
     float wZ_r = wZ * MAX_RAD_PER_SEC;
 
-    // Integrate pose in world frame
     angle_rad += wZ_r * dt;
 
     float ca = cos(angle_rad);
